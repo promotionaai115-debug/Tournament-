@@ -9,12 +9,13 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// MongoDB Connection
+// ✅ MongoDB Connection
 mongoose.connect(process.env.MONGO_URL)
 .then(() => console.log("✅ MongoDB Connected"))
 .catch(err => console.log("❌ MongoDB Error:", err));
 
-// Registration Schema
+
+// ✅ Registration Schema
 const RegistrationSchema = new mongoose.Schema({
   matchId: String,
   teamName: String,
@@ -28,18 +29,21 @@ const RegistrationSchema = new mongoose.Schema({
 
 const Registration = mongoose.model("Registration", RegistrationSchema);
 
-// Razorpay Setup
+
+// ✅ Razorpay Setup (FIXED)
 const razorpay = new Razorpay({
-  key_id: process.env.KEY_ID,
-  key_secret: process.env.KEY_SECRET
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_SECRET
 });
 
-// Root Route (Test)
+
+// ✅ Root Route
 app.get("/", (req, res) => {
   res.send("🚀 Tournament Backend Running Successfully");
 });
 
-// Create Order API
+
+// ✅ Create Order API
 app.post("/create-order", async (req, res) => {
   try {
     const { amount } = req.body;
@@ -54,14 +58,14 @@ app.post("/create-order", async (req, res) => {
     res.json(order);
 
   } catch (error) {
-    console.log(error);
+    console.log("Order Error:", error);
     res.status(500).json({ error: "Order creation failed" });
   }
 });
 
-// Verify Payment API
-app.post("/verify-payment", async (req, res) => {
 
+// ✅ Verify Payment API (FIXED)
+app.post("/verify-payment", async (req, res) => {
   try {
     const {
       razorpay_order_id,
@@ -71,7 +75,7 @@ app.post("/verify-payment", async (req, res) => {
     } = req.body;
 
     const generated_signature = crypto
-      .createHmac("sha256", process.env.KEY_SECRET)
+      .createHmac("sha256", process.env.RAZORPAY_SECRET)
       .update(razorpay_order_id + "|" + razorpay_payment_id)
       .digest("hex");
 
@@ -94,12 +98,13 @@ app.post("/verify-payment", async (req, res) => {
     }
 
   } catch (error) {
-    console.log(error);
+    console.log("Verification Error:", error);
     res.status(500).json({ error: "Verification failed" });
   }
 });
 
-// Start Server
+
+// ✅ Start Server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🔥 Server running on port ${PORT}`);
