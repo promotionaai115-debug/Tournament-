@@ -29,9 +29,9 @@ const Registration = mongoose.model("Registration", RegistrationSchema);
 
 // ✅ Cashfree Setup (SANDBOX MODE)
 const cashfree = new Cashfree(
-  CFEnvironment.SANDBOX,   // 👈 TEST MODE
-  process.env.CF_APP_ID,
-  process.env.CF_SECRET_KEY
+  CFEnvironment.SANDBOX,
+  process.env.CASHFREE_APP_ID,
+  process.env.CASHFREE_SECRET_KEY
 );
 
 // ✅ Root Route
