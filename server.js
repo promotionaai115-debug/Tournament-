@@ -30,7 +30,7 @@ const RegistrationSchema = new mongoose.Schema({
 const Registration = mongoose.model("Registration", RegistrationSchema);
 
 
-// ✅ Razorpay Setup (FIXED)
+// ✅ Razorpay Setup
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_SECRET
@@ -43,13 +43,13 @@ app.get("/", (req, res) => {
 });
 
 
-// ✅ Create Order API
+// ✅ Create Order API (Same)
 app.post("/create-order", async (req, res) => {
   try {
     const { amount } = req.body;
 
     const options = {
-      amount: amount * 100,
+      amount: Number(amount) * 100,
       currency: "INR",
       receipt: "receipt_" + Date.now()
     };
@@ -64,9 +64,10 @@ app.post("/create-order", async (req, res) => {
 });
 
 
-// ✅ Verify Payment API (FIXED)
+// ✅ Verify Payment API (Same + Duplicate Block Added)
 app.post("/verify-payment", async (req, res) => {
   try {
+
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -80,6 +81,15 @@ app.post("/verify-payment", async (req, res) => {
       .digest("hex");
 
     if (generated_signature === razorpay_signature) {
+
+      // 🔒 Duplicate Payment Check
+      const exists = await Registration.findOne({
+        paymentId: razorpay_payment_id
+      });
+
+      if (exists) {
+        return res.status(400).json({ error: "Already Registered" });
+      }
 
       await Registration.create({
         matchId: formData.matchId,
@@ -100,6 +110,17 @@ app.post("/verify-payment", async (req, res) => {
   } catch (error) {
     console.log("Verification Error:", error);
     res.status(500).json({ error: "Verification failed" });
+  }
+});
+
+
+// ✅ NEW: Admin Panel Data Route (Added Only)
+app.get("/admin-data", async (req, res) => {
+  try {
+    const data = await Registration.find().sort({ createdAt: -1 });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch data" });
   }
 });
 
