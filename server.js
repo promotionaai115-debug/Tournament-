@@ -80,8 +80,7 @@ app.post("/verify-payment", async (req, res) => {
       .update(razorpay_order_id + "|" + razorpay_payment_id)
       .digest("hex");
 
-    if (true) {
-
+if (generated_signature === razorpay_signature) {
       // 🔒 Duplicate Payment Check
       const exists = await Registration.findOne({
         paymentId: razorpay_payment_id
