@@ -1,8 +1,9 @@
 require("dotenv").config();
 const express = require("express");
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const { Cashfree, CFEnvironment } = require("cashfree-pg");
 
 const app = express();
 app.use(express.json());
@@ -13,7 +14,8 @@ mongoose.connect(process.env.MONGO_URL)
 .then(() => console.log("✅ MongoDB Connected"))
 .catch(err => console.log("❌ MongoDB Error:", err));
 
-// ✅ Registration Schema (UNCHANGED)
+
+// ✅ Registration Schema
 const RegistrationSchema = new mongoose.Schema({
   matchId: String,
   teamName: String,
@@ -27,40 +29,33 @@ const RegistrationSchema = new mongoose.Schema({
 
 const Registration = mongoose.model("Registration", RegistrationSchema);
 
-// ✅ Cashfree Setup (SANDBOX MODE)
-const cashfree = new Cashfree(
-  CFEnvironment.SANDBOX,
-  process.env.CASHFREE_APP_ID,
-  process.env.CASHFREE_SECRET_KEY
-);
 
-// ✅ Root Route
-app.get("/", (req, res) => {
-  res.send("🚀 Tournament Backend Running Successfully (Cashfree Test Mode)");
+// ✅ Razorpay Setup
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_SECRET
 });
 
 
-// ✅ Create Order API
+// ✅ Root Route
+app.get("/", (req, res) => {
+  res.send("🚀 Tournament Backend Running Successfully");
+});
+
+
+// ✅ Create Order API (Same)
 app.post("/create-order", async (req, res) => {
   try {
+    const { amount } = req.body;
 
-    const { amount, phone } = req.body;
-
-    const request = {
-      order_amount: Number(amount),
-      order_currency: "INR",
-      customer_details: {
-        customer_id: "user_" + Date.now(),
-        customer_phone: phone
-      }
+    const options = {
+      amount: Number(amount) * 100,
+      currency: "INR",
+      receipt: "receipt_" + Date.now()
     };
 
-    const response = await cashfree.PGCreateOrder(request);
-
-    res.json({
-      payment_session_id: response.data.payment_session_id,
-      orderId: response.data.order_id
-    });
+    const order = await razorpay.orders.create(options);
+    res.json(order);
 
   } catch (error) {
     console.log("Order Error:", error);
@@ -69,48 +64,56 @@ app.post("/create-order", async (req, res) => {
 });
 
 
-// ✅ Webhook Verification
-app.post("/cashfree-webhook", async (req, res) => {
+// ✅ Verify Payment API (Same + Duplicate Block Added)
+app.post("/verify-payment", async (req, res) => {
   try {
 
-    const data = req.body;
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      formData
+    } = req.body;
 
-    if (data.type === "PAYMENT_SUCCESS_WEBHOOK") {
+    const generated_signature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_SECRET)
+      .update(razorpay_order_id + "|" + razorpay_payment_id)
+      .digest("hex");
 
-      const payment = data.data;
-
+if (generated_signature === razorpay_signature) {
       // 🔒 Duplicate Payment Check
       const exists = await Registration.findOne({
-        paymentId: payment.cf_payment_id
+        paymentId: razorpay_payment_id
       });
 
       if (exists) {
-        return res.status(200).send("Already Registered");
+        return res.status(400).json({ error: "Already Registered" });
       }
 
       await Registration.create({
-        matchId: payment.order_meta?.matchId || "",
-        teamName: payment.order_meta?.teamName || "",
-        players: payment.order_meta?.players || [],
-        phone: payment.customer_details.customer_phone,
-        paymentId: payment.cf_payment_id,
-        orderId: payment.order_id,
-        amount: payment.order_amount
+        matchId: formData.matchId,
+        teamName: formData.teamName,
+        players: formData.players,
+        phone: formData.phone,
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        amount: formData.amount
       });
 
-      console.log("✅ Test Payment Saved in MongoDB");
+      res.json({ success: true });
+
+    } else {
+      res.status(400).json({ success: false });
     }
 
-    res.status(200).send("Webhook Received");
-
   } catch (error) {
-    console.log("Webhook Error:", error);
-    res.status(500).json({ error: "Webhook failed" });
+    console.log("Verification Error:", error);
+    res.status(500).json({ error: "Verification failed" });
   }
 });
 
 
-// ✅ Admin Panel Route (UNCHANGED)
+// ✅ NEW: Admin Panel Data Route (Added Only)
 app.get("/admin-data", async (req, res) => {
   try {
     const data = await Registration.find().sort({ createdAt: -1 });
@@ -119,6 +122,7 @@ app.get("/admin-data", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch data" });
   }
 });
+
 
 // ✅ Start Server
 const PORT = process.env.PORT || 10000;
